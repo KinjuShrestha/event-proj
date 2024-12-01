@@ -33,11 +33,11 @@ const AuthScreen = ({ navigation }) => {
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
-      setLoading(false); // State update; navigation will happen automatically in App.js
+      setLoading(false); 
     } catch (error) {
       setLoading(false);
-      console.error(error);
-      // Handle error cases (same as before)
+      
+    
     }
   };
 

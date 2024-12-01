@@ -9,64 +9,32 @@ import {
 } from 'react-native';
 import { auth, firestore } from '../database/firebase';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, getDocs, query, where, doc, deleteDoc, addDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, updateDoc, onSnapshot,deleteDoc } from 'firebase/firestore';
 
 const HomeScreen = ({ navigation, route }) => {
   const [events, setEvents] = useState([]);
   const [userEvents, setUserEvents] = useState([]);
-  const [favorites, setFavorites] = useState([]);
   const userId = auth.currentUser?.uid;
 
-  // Fetch events and favorites when the component mounts
+
   useEffect(() => {
-    if (!userId) {
-      Alert.alert("Error", "User not logged in");
-      navigation.navigate("Login"); // Redirect to login if not logged in
-      return;
-    }
+    const unsubscribe = onSnapshot(collection(firestore, 'events'), (eventsSnapshot) => {
+      const eventsList = eventsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+     
+      setEvents(eventsList);
+      setUserEvents(eventsList.filter((event) => event.userId === userId));
+    });
 
-    // Fetch all events
-    const fetchEvents = async () => {
-      try {
-        const eventsSnapshot = await getDocs(collection(firestore, 'events'));
-        const eventsList = eventsSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        console.log('Fetched events:', eventsList);
-        setEvents(eventsList);
-        setUserEvents(eventsList.filter((event) => event.userId === userId));
-      } catch (error) {
-        console.error("Error fetching events:", error);
-      }
-    };
+    return () => unsubscribe();
+  }, []);
 
-    // Fetch user's favorite events
-    const fetchFavorites = async () => {
-      try {
-        const favoritesSnapshot = await getDocs(query(collection(firestore, 'favorites'), where('userId', '==', userId)));
-        const favoritesList = favoritesSnapshot.docs.map((doc) => doc.data());
-        console.log('Fetched favorites:', favoritesList);
-        setFavorites(favoritesList);
-      } catch (error) {
-        console.error("Error fetching favorites:", error);
-      }
-    };
-
-    fetchEvents();
-    fetchFavorites();
-
-    // If a new event is passed from EventScreen, add it to state
-    if (route.params?.newEvent) {
-      const { newEvent } = route.params;
-      setEvents((prevEvents) => [...prevEvents, newEvent]);
-      setUserEvents((prevUserEvents) => [...prevUserEvents, newEvent]);
-    }
-  }, [route.params?.newEvent, userId]);
-
+  
   const handleLogout = async () => {
     await auth.signOut();
-    navigation.navigate("Login"); // Redirect to login screen after logout
+   await navigation.navigate("Auth");
   };
 
   const handleAddEvent = () => {
@@ -77,63 +45,20 @@ const HomeScreen = ({ navigation, route }) => {
     navigation.navigate('Event', { event, isEdit: true });
   };
 
-  // Add event to favorites
-  const handleFavorite = async (eventId) => {
+  
+  const toggleFavorite = async (eventId, isFavorite) => {
     try {
-      // Check if the event is already in the favorites
-      const favoriteExists = favorites.some((fav) => fav.eventId === eventId);
-      
-      if (!favoriteExists) {
-        // Add to favorites collection
-        await addDoc(collection(firestore, 'favorites'), {
-          eventId,
-          userId,
-        });
-
-        // Update favorites in the local state
-        setFavorites((prev) => [...prev, { eventId, userId }]);
-        console.log('Added to favorites:', eventId);
-      } else {
-        console.log('Event already in favorites:', eventId);
-      }
-    } catch (error) {
-      console.error("Error adding favorite:", error);
-    }
-  };
-
-  // Remove event from favorites
-  const handleRemoveFavorite = async (eventId) => {
-    try {
-      const favoritesSnapshot = await getDocs(query(collection(firestore, 'favorites'), where('eventId', '==', eventId), where('userId', '==', userId)));
-      favoritesSnapshot.forEach(async (doc) => {
-        await deleteDoc(doc.ref); // Correctly delete from Firestore
+      const eventRef = doc(firestore, 'events', eventId);
+      await updateDoc(eventRef, {
+        isFavorite: !isFavorite,
       });
 
-      // Update local favorites state
-      setFavorites(favorites.filter((fav) => fav.eventId !== eventId));
-      console.log('Removed from favorites:', eventId);
     } catch (error) {
-      console.error("Error removing favorite:", error);
+      console.error("Error updating favorite:", error);
     }
   };
 
-  // Delete event
-  const handleDeleteEvent = async (eventId) => {
-    try {
-      // Delete event from Firestore
-      await deleteDoc(doc(firestore, 'events', eventId));
-
-      // Remove from UI state
-      setUserEvents(userEvents.filter((event) => event.id !== eventId));
-      setEvents(events.filter((event) => event.id !== eventId));
-
-      console.log('Deleted event:', eventId);
-    } catch (error) {
-      console.error("Error deleting event:", error);
-    }
-  };
-
-  // Render event item
+  
   const renderEvent = ({ item }) => (
     <View style={styles.event}>
       <View style={styles.eventHeader}>
@@ -146,18 +71,10 @@ const HomeScreen = ({ navigation, route }) => {
       <View style={styles.eventActions}>
         <TouchableOpacity
           style={styles.actionButton}
-          onPress={() =>
-            favorites.some((fav) => fav.eventId === item.id)
-              ? handleRemoveFavorite(item.id)
-              : handleFavorite(item.id)
-          }
+          onPress={() => toggleFavorite(item.id, item.isFavorite)}
         >
           <Ionicons
-            name={
-              favorites.some((fav) => fav.eventId === item.id)
-                ? 'heart'
-                : 'heart-outline'
-            }
+            name={item.isFavorite ? 'heart' : 'heart-outline'}
             size={24}
             color="#FF6347"
           />
@@ -177,6 +94,19 @@ const HomeScreen = ({ navigation, route }) => {
     </View>
   );
 
+  const handleDeleteEvent = async (eventId) => {
+    try {
+      await deleteDoc(doc(firestore, 'events', eventId));
+
+      setEvents(events.filter((event) => event.id !== eventId));
+      setUserEvents(userEvents.filter((event) => event.id !== eventId));
+
+      console.log('Deleted event:', eventId);
+    } catch (error) {
+      console.error("Error deleting event:", error);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -189,19 +119,22 @@ const HomeScreen = ({ navigation, route }) => {
           <Text style={styles.headerButtonText}>Add Event</Text>
         </TouchableOpacity>
       </View>
-      <Text style={styles.sectionTitle}>Your Events</Text>
+
+     
+      <Text style={styles.sectionTitle}>Favorites</Text>
       <FlatList
-        data={userEvents}
+        data={events.filter(event => event.isFavorite)} 
         renderItem={renderEvent}
         keyExtractor={(item) => item.id}
-        ListEmptyComponent={<Text>No events found</Text>} // Empty state for user events
+        ListEmptyComponent={<Text>No favorite events found</Text>}
       />
+
       <Text style={styles.sectionTitle}>All Events</Text>
       <FlatList
         data={events}
         renderItem={renderEvent}
         keyExtractor={(item) => item.id}
-        ListEmptyComponent={<Text>No events found</Text>} // Empty state for all events
+        ListEmptyComponent={<Text>No events found</Text>}
       />
     </View>
   );
@@ -265,11 +198,11 @@ const styles = StyleSheet.create({
   },
   eventActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     marginTop: 10,
   },
   actionButton: {
-    marginLeft: 15,
+    padding: 5,
   },
 });
 

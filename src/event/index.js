@@ -9,15 +9,16 @@ import {
 } from 'react-native';
 import { firestore, auth } from '../database/firebase';
 import { doc, setDoc, updateDoc } from 'firebase/firestore';
+import { Ionicons } from '@expo/vector-icons'; 
 
 const EventScreen = ({ route, navigation }) => {
-  const { event = null, isEdit = false } = route.params || {}; // Ensure default values
+  const { event = null, isEdit = false } = route.params || {}; 
   const [title, setTitle] = useState(event ? event.title : '');
   const [date, setDate] = useState(event ? event.date : '');
   const [description, setDescription] = useState(event ? event.description : '');
   const userId = auth.currentUser.uid;
 
-  // Handle form submission for creating or editing an event
+
   const handleSubmit = async () => {
     if (!title || !date || !description) {
       Alert.alert('Error', 'Please fill out all fields.');
@@ -26,15 +27,15 @@ const EventScreen = ({ route, navigation }) => {
 
     try {
       if (isEdit && event && event.id) {
-        // If it's editing, update the existing event
+       
         await updateDoc(doc(firestore, 'events', event.id), {
           title,
           date,
           description,
         });
       } else {
-        // If it's creating a new event, add it to Firestore
-        const newEventId = isEdit ? event.id : Date.now().toString(); // Ensure a valid ID for new events
+       
+        const newEventId = isEdit ? event.id : Date.now().toString(); 
         await setDoc(doc(firestore, 'events', newEventId), {
           title,
           date,
@@ -44,7 +45,7 @@ const EventScreen = ({ route, navigation }) => {
       }
 
       Alert.alert('Success', `Event ${isEdit ? 'updated' : 'created'} successfully!`);
-      navigation.goBack(); // Navigate back to the previous screen
+      navigation.goBack(); 
     } catch (error) {
       Alert.alert('Error', 'Failed to save event. Please try again.');
       console.error(error);
@@ -53,6 +54,14 @@ const EventScreen = ({ route, navigation }) => {
 
   return (
     <View style={styles.container}>
+     
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => navigation.goBack()} 
+      >
+        <Ionicons name="arrow-back" size={24} color="#4CAF50" />
+      </TouchableOpacity>
+
       <Text style={styles.headerText}>{isEdit ? 'Edit Event' : 'Create Event'}</Text>
 
       <TextInput
@@ -112,7 +121,7 @@ const styles = StyleSheet.create({
   },
   textArea: {
     height: 100,
-    textAlignVertical: 'top', // Align text at the top for multiline inputs
+    textAlignVertical: 'top', 
   },
   button: {
     backgroundColor: '#4CAF50',
@@ -125,6 +134,10 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  backButton: {
+    marginTop: 20,
+    marginBottom: 10,
   },
 });
 
